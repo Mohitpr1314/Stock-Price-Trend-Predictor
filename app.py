@@ -1,111 +1,133 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import pandas_datareader as data
 import yfinance as yf
 from keras.models import load_model
-import sklearn
+from sklearn.preprocessing import MinMaxScaler
 import streamlit as st
 import warnings
 warnings.filterwarnings("ignore")
 
-
+# Date range for fetching stock data
 start = '2010-01-01'
 end = '2024-12-31'
 
-st.title('Stock Trend Prediction Tool')
-user_input = st.text_input('Enter Stock ticker','AAPL')
+# Ticker dictionary with names
+ticker_dict = {
+    "AAPL": "Apple Inc.",
+    "MSFT": "Microsoft Corporation",
+    "AMZN": "Amazon.com, Inc.",
+    "GOOGL": "Alphabet Inc. (Class A)",
+    "META": "Meta Platforms, Inc.",
+    "NVDA": "NVIDIA Corporation",
+    "TSLA": "Tesla, Inc.",
+    "JPM": "JPMorgan Chase & Co.",
+    "BRK-B": "Berkshire Hathaway Inc. (Class B)",
+    "V": "Visa Inc.",
+    "TCS.NS": "Tata Consultancy Services",
+    "INFY.NS": "Infosys Ltd",
+    "HDFCBANK.NS": "HDFC Bank Ltd",
+    "SBIN.NS": "State Bank of India",
+    "RELIANCE.NS": "Reliance Industries Ltd"
+}
 
+# Streamlit UI
+st.title('📈 Stock Trend Prediction Tool')
 
+# Dropdown to select company
+selected_name = st.selectbox("Select a Stock", options=list(ticker_dict.values()))
+user_input = [k for k, v in ticker_dict.items() if v == selected_name][0]
+
+# Fetch data from Yahoo Finance
 df = yf.download(user_input, start=start, end=end)
 
+# Validate data
+if df.empty:
+    st.error("No data available for the selected ticker.")
+    st.stop()
 
-# Describing Data
+# Display stats
 st.subheader('Data from 2010 - 2024')
 st.write(df.describe())
 
-# visualization
+# Plot Closing Price
 st.subheader('Closing Price vs Time chart')
 fig = plt.figure(figsize=(12,6))
-plt.plot(df.Close)
+plt.plot(df['Close'], label='Closing Price')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.grid(True)
+plt.legend()
 st.pyplot(fig)
 
+# Plot with 100MA
 st.subheader('Closing Price vs Time chart with 100MA')
-ma100 = df.Close.rolling(100).mean()
+ma100 = df['Close'].rolling(100).mean()
 fig = plt.figure(figsize=(12,6))
-plt.plot(ma100, 'r')
-plt.plot(df.Close, 'b')
+plt.plot(df['Close'], label='Closing Price')
+plt.plot(ma100, 'r', label='100MA')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.grid(True)
+plt.legend()
 st.pyplot(fig)
 
+# Plot with 100MA and 200MA
 st.subheader('Closing Price vs Time chart with 100MA & 200MA')
-ma100 = df.Close.rolling(100).mean()
-ma200 = df.Close.rolling(200).mean()
+ma200 = df['Close'].rolling(200).mean()
 fig = plt.figure(figsize=(12,6))
-plt.plot(ma100, 'r')
-plt.plot(ma200, 'g')
-plt.plot(df.Close, 'b')
+plt.plot(df['Close'], label='Closing Price')
+plt.plot(ma100, 'r', label='100MA')
+plt.plot(ma200, 'g', label='200MA')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.grid(True)
+plt.legend()
 st.pyplot(fig)
 
-
-# spliting data into training and testing
-
-
+# Split data
 data_training = pd.DataFrame(df['Close'][0:int(len(df)*0.70)])
-data_testing = pd.DataFrame(df['Close'][int(len(df)*0.70):int(len(df))])
+data_testing = pd.DataFrame(df['Close'][int(len(df)*0.70):])
 
-from sklearn.preprocessing import MinMaxScaler
+# Scale training data
 scaler = MinMaxScaler(feature_range=(0,1))
-
 data_training_array = scaler.fit_transform(data_training)
 
-# spliting data into x_train , x_test
-
-# x_train = []
-# y_train = []
-
-
-# for i in range(100,data_training_array.shape[0]):
-#     x_train.append(data_training_array[i-100:i])
-#     y_train.append(data_training_array[i,0])
-
-# x_train = np.array(x_train)
-# y_train = np.array(y_train)
-
-
-# model 
-
+# Load pretrained model
 model = load_model('keras_model.h5')
 
+# Prepare test data
 past_100_days = data_training.tail(100)
 final_df = pd.concat([past_100_days, data_testing], ignore_index=True)
-input_data = scaler.fit_transform(final_df)
 
+input_scaler = MinMaxScaler(feature_range=(0,1))
+input_data = input_scaler.fit_transform(final_df)
 
 x_test = []
 y_test = []
 
-for i in range(100,input_data.shape[0]):
+for i in range(100, input_data.shape[0]):
     x_test.append(input_data[i-100:i])
-    y_test.append(input_data[i,0])
+    y_test.append(input_data[i, 0])
 
 x_test, y_test = np.array(x_test), np.array(y_test)
-y_predicted = model.predict(x_test)
-scaler = scaler.scale_
 
-scale_factor = 1/scaler[0]
+# Predict
+y_predicted = model.predict(x_test)
+
+# Reverse scaling
+scale_factor = 1 / input_scaler.scale_[0]
 y_predicted = y_predicted * scale_factor
 y_test = y_test * scale_factor
 
-
-
-# final Graph
+# Plot predictions
 st.subheader('Predictions vs Original')
-fig2 = plt.figure(figsize = (12,6))
-plt.plot(y_test, 'b', label = 'Original Price')
-plt.plot(y_predicted, 'r', label = 'Predicted Price')
+fig2 = plt.figure(figsize=(12,6))
+plt.plot(y_test, 'b', label='Original Price')
+plt.plot(y_predicted, 'r', label='Predicted Price')
 plt.xlabel('Time')
 plt.ylabel('Price')
-plt.title('Stock Price Prediction')
+plt.title(f'{user_input} Stock Price Prediction')
+plt.grid(True)
 plt.legend()
-plt.show()
 st.pyplot(fig2)
